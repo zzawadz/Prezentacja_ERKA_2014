@@ -1,0 +1,33 @@
+Rscript -e 'source("benchmark.R")'
+
+# odkrecenie lapacka
+#sudo rm $R_PATH/libRlapack.so
+
+# sciagniecie i rozpakowanie OpenBLAS
+
+cd OpenBLAS-develop/
+make
+sudo make install
+
+cd ../R-3.1.1
+# instalacja R ze zrodel to inna para kaloszy...
+sudo make install
+
+
+
+export R_PATH="/usr/local/lib64/R/lib"
+export BLAS_PATH="/opt/OpenBLAS/lib"
+
+
+## Kopiowanie i usuwanie starego BLAS'a
+sudo cp $R_PATH/libRblas.so $R_PATH/libRblas.so.copy
+sudo rm $R_PATH/libRblas.so 
+
+# Ustawienie nowego BLAS'a
+sudo ln -s $BLAS_PATH/libopenblas.so $R_PATH/libRblas.so
+
+
+# Przywrocenie stanu poprzedniego:
+sudo rm $R_PATH/libRblas.so
+sudo cp $R_PATH/libRblas.so.copy $R_PATH/libRblas.so
+sudo rm $R_PATH/libRblas.so.copy

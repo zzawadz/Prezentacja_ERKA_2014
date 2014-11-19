@@ -1,0 +1,236 @@
+\documentclass{beamer}
+\usetheme{Warsaw}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsfonts}
+\usepackage{polski}
+\usepackage{graphicx} 
+\usepackage{color}
+\usepackage{attrib}
+\usepackage{ragged2e}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+\usepackage{url}
+\usepackage{ragged2e}
+
+\addtobeamertemplate{block begin}{}{\justifying}
+
+\begin{document}
+
+\newcommand{\RR}{\ensuremath{\mathbb{R}^d}}
+
+\author{Zygmunt Zawadzki}
+
+\title{Optymalizacja R – dlaczego warto przesiąść się na Linuxa?}
+
+\begin{frame}
+  \titlepage
+  
+<<echo=FALSE,warning=FALSE,message=FALSE>>=
+library(knitr)
+opts_chunk$set(small.mar = TRUE, fig.width = 6.5, fig.height = 3,fig.pos='center',  message = FALSE, size='footnotesize', cache=TRUE)
+@
+  
+  
+\end{frame}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\centering
+\Large
+
+Więcej informacji, wraz z dodatkowymi materiałami można znaleźć w repozytorium na GitHubie pod adresem \url{https://github.com/zzawadz/Prezentacja_ERKA_2014}. Ewentualne uwagi i pytania można kierować na adres \url{zawadzkizygmunt@gmail.com}.
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Rzecz o szybkości R}
+
+R taki wolny...
+
+\begin{figure}[p]
+    \includegraphics[width=\textwidth]{speed.png}
+    \caption{Źródło: \url{http://julialang.org/}}
+\end{figure}
+
+
+\begin{flushright}
+... inne języki takie szybkie (oprócz Matlaba).
+
+\huge{rly?}
+\end{flushright}
+
+\end{frame}
+
+
+\begin{frame}
+[fragile]\frametitle{Rzecz o szybkości R - cd.}
+
+Rzeczywiście R nie jest demonem szybkości i można pisać w nim BARDZO nieefektywny kod:
+
+<<>>=
+library(microbenchmark)
+x = 1:10000
+slow_sum = function(x)
+{
+  sum = 0
+  for(i in 1:length(x)) sum = sum + x[i]
+  sum
+}
+microbenchmark(sum(x), slow_sum(x))
+@
+\end{frame}
+
+\begin{frame}
+
+Dobrym pytaniem byłoby - "ale dlaczego R jest taki wolny?"
+
+R w zamierzeniach nie musiał być demonem szybkości. R, a w zasadzie jego poprzednik S, miał być głównie interfacem do kodu fortranowego (ewentualnie innego języka). A sam interface nie musi być bardzo szybki, bylby tylko był wygodny. 
+
+
+Więcej - \url{https://www.youtube.com/watch?v=_hcpuRB5nGs} - prezentacja twórcy języka S - Johna Chambersa (również członka R Core Team), na tamat przeszłości i przyszłości R.
+
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}
+[fragile]\frametitle{Zagadka!}
+
+W R występują trzy główne operatory wyłuskania wartości:
+<<eval=FALSE>>=
+x[1]
+x[[1]]
+x$a
+@
+
+Sam R został napisany w C. Pytanie brzmi: ile linijek kodu ma plik w którym te operatory są zdefiniowane?
+
+\end{frame}
+
+\begin{frame}
+[fragile]\frametitle{Zagadka! Rozwiązanie.}
+
+Plik ten można znaleźć w źródłach R w \path{/src/main/subset.c}. 
+\vspace{5pt}
+
+Posiada on 1288 linijek...
+\vspace{5pt}
+
+Tyle kodu ma jednak sens - w nim zawarte jest między innymi obsługiwanie częściwego dopasowywania nazw w liście:
+<<>>=
+x = list(dluga_nazwa = 1:5, inna_nazwa = 1:5)
+x$dlu # dziala!
+@
+
+Ma to jednak oczywiste konsekwencje wydajnościowe.
+
+\end{frame}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{frame}
+[fragile]\frametitle{Realizacja idei interface w praktyce - obliczenia macierzowe}
+\small
+
+W praktyce jednak wydajność R nie jest znaczącym problemem - w końcu miał być głównie interfacem dla innych języków i bardzo dużo kodu w R służy jedynie wywołaniu określonej biblioteki, która wykonuje najcięższe obliczenia.
+
+Np. funckja eigen - służąca obliczaniu wartości własnych i wektorów własnych korzysta z biblioteki do obliczeń macierzowych LAPACK (Linear Algebra PACKage), która została napisana w Fortranie. Można to poznać po tym, że wewnątrz funkcji znajduje się linijka wywołująca kod zewnętrzny:
+
+<<eval=FALSE>>=
+.Internal(La_rs(x, only.values)) # z eigen
+.Call(...) # inny interface - do C i C++
+.External(...)
+.C(...) # stary interface do C
+@
+
+Definicję La\_rs można znaleźć w  \path{/src/modules/lapack/Lapack.c}, a szukając dalej w tym folderze można również znaleźć kod fortranowy Lapack'a (ok 200k linii kodu - duża rzecz...).
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Lapack i BLAS}
+
+Gdyby wejść głębiej, okaże się, że LAPACK (kod fortranowy), korzysta z implementacji BLASu zawierającej zbiór podstawowych operacji na macierzach takich jak np. mnożenie macierzowe. 
+
+Sam BLAS to API (Application Programming Interface), opisujące jak powinna wyglądać biblioteka do obliczeń macierzowych. Na podstawie tego opisu tworzy się implementacje które realizujące te obliczenia.
+
+\vspace{5pt}
+
+Istnieje kilka implementacji BLASu - np. ATLAS, MKL i OpenBLAS. R również posiada swoją implementację, jednak nie jest ona najszybsza...
+
+
+\end{frame}
+
+\begin{frame}
+
+... skoro ten standardowy R-owy BLAS nie jest najszybszy, to może go podmienić na wydajniejszy? 
+
+\pause
+Zaraz będzie opis jak to prosto zrobić na Linuxie...
+\vspace{5pt}
+
+\pause
+... ale coś za dużo tekstu w tej prezentacji. Dalszy tekst będzie nudny...
+
+\pause
+\begin{flushright}
+... może by tak pokazać na żywo, jak to się robi?
+\end{flushright}
+
+\vspace{10pt}
+
+Całe działanie wzorowane jest na wpisie z \url{http://www.stat.cmu.edu/~nmv/2013/07/09/for-faster-r-use-openblas-instead-better-than-atlas-trivial-to-switch-to-on-ubuntu/}.
+
+\pause
+\huge{
+Czas na konsolę!
+}
+
+
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+
+... mam nadzieję, że prezentacja optymalizacji BLAS na żywo się udała.
+\pause
+
+Jeżeli tak, to znaczy, że konsola nie jest taka straszna i można w niej troszkę poczarować:)
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Co dalej?}
+
+Nie dawno Revolution Analytics wprowadziło swoją wersję R (\url{http://mran.revolutionanalytics.com/download/}), która wykorzystuje MKL - czyli BLAS stworzony przez Intela - jest on naprawdę szybki i być może sztuczka z podmianą R-owego BLAS-a przestaje mieć jakiekolwiek znaczenie w przypadku używania wersji od Revolution.
+
+\vspace{10pt}
+Trzeba to sprawdzić!
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Dlaczego warto przejść na Linuxa?}
+
+\begin{itemize}
+\item System bardzo konsolowy - a co za tym idzie - bliższy R.
+\item Nie ma Office:)
+\item Czasem dosyć problematyczny, a co za tym idzie frustrujący (a to dobrze! \url{http://youtu.be/JxwxefRAu70?t=30m} - wywiad z jednym z mistrzów R, nt. wartości frustracji).
+\end{itemize}
+
+
+\end{frame}
+
+\begin{frame}
+\centering
+\huge{Dziękuję za uwagę!}
+
+\end{frame}
+
+\end{document}

@@ -9,3 +9,13 @@
 
 # RStudio files
 .Rproj.user/
+.Rproj.user
+
+*.nav
+*.snm
+cache
+*.tex
+*.toc
+*.vrb
+*.log
+*.gz
